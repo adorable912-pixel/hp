@@ -743,64 +743,35 @@ a.dl { text-decoration: none; }
   });
   items.forEach(function (d) { d.addEventListener('toggle', syncBtn); });
 
-  /* ---- 파일 내려받기 ---- */
-  var dlApi = null;
-  var dlButtons = Array.prototype.slice.call(document.querySelectorAll('[data-file]'));
-  function dlOff() {
-    dlButtons.forEach(function (b) {
-      var f = FILES[b.getAttribute('data-file')];
-      if (!f || !f.path) { b.disabled = true; return; }
-      var a = document.createElement('a');
-      a.className = b.className;
-      a.href = f.path.split('/').map(encodeURIComponent).join('/');
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.innerHTML = b.innerHTML;
-      var st = a.querySelector('.state');
-      if (st) {
-        var idle = st.getAttribute('data-idle').replace('눌러서 내려받기', '눌러서 열기');
-        st.setAttribute('data-idle', idle);
-        st.textContent = idle;
-      }
-      b.parentNode.replaceChild(a, b);
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('.dl-note'), function (n) {
-      if (n.parentNode.querySelector('a.dl')) {
-        n.textContent = '이 화면에서는 파일이 새 탭에서 열려요. 열린 파일을 저장해서 사용해 주세요.';
-      }
-      n.hidden = false;
-    });
-  }
-  dlButtons.forEach(function (b) {
+  /* ---- 파일 내려받기: 일반 브라우저에서 동작 ---- */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-file]'), function (b) {
+    b.disabled = false;
     b.addEventListener('click', function () {
       var f = FILES[b.getAttribute('data-file')];
-      if (!f || !dlApi) return;
-      var bin = atob(f.b64), u = new Uint8Array(bin.length);
-      for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      if (!f) return;
       var st = b.querySelector('.state');
-      var say = function (m) {
-        if (!st) return;
-        st.textContent = m;
-        setTimeout(function () { st.textContent = st.getAttribute('data-idle'); }, 2600);
-      };
-      dlApi.save({ filename: f.name, data: u }).then(
-        function () { say('저장을 시작했어요'); },
-        function (err) {
-          if (err && err.code === 'declined') { say('저장을 취소했어요'); return; }
-          say('내려받지 못했어요. 다시 눌러 주세요');
-        }
-      );
+      try {
+        var bin = atob(f.b64), u = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        var mime = /\.pdf$/i.test(f.name) ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        var url = URL.createObjectURL(new Blob([u], {type: mime}));
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = f.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        if (st) st.textContent = '다운로드를 요청했어요';
+      } catch (e) {
+        if (st) st.textContent = '내려받지 못했어요. 다시 눌러 주세요';
+      }
+      if (st) setTimeout(function () { st.textContent = st.getAttribute('data-idle'); }, 2600);
     });
   });
-  (function initDownloads(tries) {
-    try {
-      if (window.claude && window.claude.use) {
-        window.claude.use('downloads').then(function (api) { if (api) { dlApi = api; } else { dlOff(); } }, dlOff);
-        return;
-      }
-    } catch (e) { dlOff(); return; }
-    if (tries < 20) { setTimeout(function () { initDownloads(tries + 1); }, 250); } else { dlOff(); }
-  })(0);
+  Array.prototype.forEach.call(document.querySelectorAll('.dl-note'), function (n) {
+    n.hidden = true;
+  });
 
   /* ---- 연락처 복사 ---- */
   Array.prototype.forEach.call(document.querySelectorAll('.copy'), function (b) {
